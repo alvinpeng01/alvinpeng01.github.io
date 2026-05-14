@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Who Am I?</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #fff;
+      color: #111;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 6px; }
+    h2 { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
+    p  { color: #555; margin-bottom: 12px; }
+
+    input {
+      display: block;
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+      font-family: inherit;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    input:focus { border-color: #111; }
+
+    button {
+      padding: 9px 18px;
+      border: 1px solid #111;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      background: #111;
+      color: #fff;
+      margin-right: 8px;
+    }
+    button.ghost { background: #fff; color: #111; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .divider { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+
+    .code-display {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 8px;
+      margin: 4px 0 16px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .row:last-child { border-bottom: none; }
+
+    .tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 99px;
+      background: #f0f0f0;
+      color: #555;
+      white-space: nowrap;
+    }
+    .tag.green { background: #dcfce7; color: #166534; }
+
+    .box {
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    .muted { color: #888; font-size: 0.85rem; }
+    .error { color: #c00; font-size: 0.875rem; margin-bottom: 10px; }
+    .success { color: #166534; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <div id="app">Loading...</div>
+
+  <script>
+    const DB = supabase.createClient(
+      'https://iawxklgmzuoebfuhdcsp.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlhd3hrbGdtenVvZWJmdWhkY3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3Njg1ODksImV4cCI6MjA5NDM0NDU4OX0.9-kqN1ca3ughL7mjHiwmrZCipv0YrH25vWaMZ1Btf6A'
+    )
+
+    const app = () => document.getElementById('app')
+    const myId = () => localStorage.getItem('playerId')
+    const rand = () => Math.random().toString(36).slice(2, 8).toUpperCase()
+
+    let activeChannel = null
+    function setChannel(ch) {
+      if (activeChannel) DB.removeChannel(activeChannel)
+      activeChannel = ch
+    }
+
+    // ── Router ────────────────────────────────────────────
+    function route() {
+      const [page, param] = location.hash.slice(1).split('/')
+      if (page === 'lobby' && param) initLobby(param)
+      else if (page === 'game' && param) initGame(param)
+      else renderHome()
+    }
+    window.addEventListener('hashchange', route)
+
+    // ── Home ──────────────────────────────────────────────
+    function renderHome(err = '') {
+      app().innerHTML = `
+        <h1>Who Am I?</h1>
+        <p>Your friends put a famous person on your head. You have to figure out who you are by asking yes/no questions.</p>
+        <hr class="divider">
+        <h2>Your name</h2>
+        <input id="name" placeholder="Enter your name..." autocomplete="off">
+        ${err ? `<div class="error">${err}</div>` : ''}
+        <button onclick="createRoom()">Start Session</button>
+        <hr class="divider">
+        <h2>Have a code?</h2>
+        <div style="display:flex;gap:8px">
+          <input id="code" placeholder="ABC123" maxlength="6"
+            style="letter-spacing:5px;text-transform:uppercase;flex:1;margin:0"
+            oninput="this.value=this.value.toUpperCase()">
+          <button class="ghost" onclick="joinRoom()">Join</button>
+        </div>
+      `
+      document.getElementById('name').focus()
+    }
+
+    async function createRoom() {
+      const name = document.getElementById('name').value.trim()
+      if (!name) return renderHome('Enter your name first')
+      const code = rand()
+      const playerId = crypto.randomUUID()
+      localStorage.setItem('playerId', playerId)
+      const { data: room, error } = await DB.from('rooms').insert({ code, host_id: playerId }).select().single()
+      if (error) return renderHome(error.message)
+      await DB.from('players').insert({ id: playerId, room_id: room.id, name })
+      location.hash = `lobby/${code}`
+    }
+
+    async function joinRoom() {
+      const name = document.getElementById('name').value.trim()
+      const code = document.getElementById('code').value.trim().toUpperCase()
+      if (!name) return renderHome('Enter your name first')
+      if (!code) return renderHome('Enter a room code')
+      const { data: room, error } = await DB.from('rooms').select('id,status').eq('code', code).single()
+      if (error || !room) return renderHome('Room not found')
+      if (room.status !== 'lobby') return renderHome('Game already started')
+      const playerId = crypto.randomUUID()
+      localStorage.setItem('playerId', playerId)
+      await DB.from('players').insert({ id: playerId, room_id: room.id, name })
+      location.hash = `lobby/${code}`
+    }
+
+    // ── Lobby ─────────────────────────────────────────────
+    async function initLobby(code) {
+      const { data: room } = await DB.from('rooms').select('*').eq('code', code).single()
+      if (!room) return renderHome('Room not found')
+      if (room.status === 'playing') { location.hash = `game/${code}`; return }
+
+      await refreshLobby(room.id, code)
+
+      const ch = DB.channel(`lobby-${code}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${room.id}` }, () => refreshLobby(room.id, code))
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, () => refreshLobby(room.id, code))
+        .subscribe()
+      setChannel(ch)
+    }
+
+    async function refreshLobby(roomId, code) {
+      const { data: room } = await DB.from('rooms').select('*').eq('id', roomId).single()
+      const { data: players } = await DB.from('players').select('*').eq('room_id', roomId).order('created_at')
+      if (!room || !players) return
+      if (room.status === 'playing') { setChannel(null); location.hash = `game/${code}`; return }
+
+      const isHost = room.host_id === myId()
+      const me = players.find(p => p.id === myId())
+
+      if (room.status === 'lobby') {
+        // ── Lobby phase
+        const rows = players.map(p => `
+          <div class="row">
+            <span style="flex:1">${p.name}</span>
+            ${p.id === room.host_id ? '<span class="tag">Host</span>' : ''}
+            ${p.id === myId() && p.id !== room.host_id ? '<span class="muted">you</span>' : ''}
+          </div>`).join('')
+
+        app().innerHTML = `
+          <p class="muted">Room code</p>
+          <div class="code-display">${code}</div>
+          <p>${players.length} player${players.length !== 1 ? 's' : ''} joined</p>
+          <hr class="divider">
+          <h2>Players</h2>
+          <div>${rows}</div>
+          <hr class="divider">
+          ${isHost
+            ? `<button ${players.length < 2 ? 'disabled' : ''} onclick="beginAssigning('${roomId}','${code}')">
+                ${players.length < 2 ? 'Waiting for more players...' : 'Start assigning'}
+               </button>`
+            : `<p>Waiting for the host to start...</p>`}
+        `
+
+      } else if (room.status === 'assigning') {
+        // ── Assigning phase
+        const myTarget = players.find(p => p.id === me?.assigning_target_id)
+        const submitted = !!myTarget?.assigned_person
+        const allAssigned = players.every(p => p.assigned_person)
+        const assignedCount = players.filter(p => p.assigned_person).length
+
+        const subRows = players.map(p => {
+          const target = players.find(t => t.id === p.assigning_target_id)
+          const done = !!target?.assigned_person
+          return `
+            <div class="row">
+              <span style="flex:1">${p.name}</span>
+              ${target ? `<span class="muted">→ ${target.name}</span>` : ''}
+              <span class="tag ${done ? 'green' : ''}">${done ? 'Done' : '...'}</span>
+            </div>`
+        }).join('')
+
+        let assignmentHTML = ''
+        if (!myTarget) {
+          assignmentHTML = `<p>Setting up assignments...</p>`
+        } else if (submitted) {
+          assignmentHTML = `
+            <p class="success">Submitted — you assigned <strong>${myTarget.assigned_person}</strong> to <strong>${myTarget.name}</strong>.</p>
+            <p class="muted">Waiting for everyone else...</p>`
+        } else {
+          assignmentHTML = `
+            <p>Assign a famous person to <strong>${myTarget.name}</strong>:</p>
+            <input id="person-input" placeholder="e.g. Taylor Swift, LeBron James..." autocomplete="off">
+            <button onclick="submitAssignment('${myTarget.id}')">Submit</button>`
+        }
+
+        app().innerHTML = `
+          <p class="muted">Room code</p>
+          <div class="code-display">${code}</div>
+          <p>${assignedCount}/${players.length} submitted</p>
+          <hr class="divider">
+          <h2>Submissions</h2>
+          <div>${subRows}</div>
+          <hr class="divider">
+          <h2>Your assignment</h2>
+          ${assignmentHTML}
+          ${isHost && allAssigned ? `<hr class="divider"><button onclick="startGame('${roomId}','${code}')">Start Game</button>` : ''}
+          ${isHost && !allAssigned ? `<p class="muted" style="margin-top:8px">You'll see the Start Game button once everyone submits.</p>` : ''}
+        `
+
+        if (!submitted && myTarget) {
+          document.getElementById('person-input')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') submitAssignment(myTarget.id)
+          })
+          document.getElementById('person-input')?.focus()
+        }
+      }
+    }
+
+    async function beginAssigning(roomId, code) {
+      const { data: players } = await DB.from('players').select('*').eq('room_id', roomId)
+      const shuffled = [...players].sort(() => Math.random() - 0.5)
+      for (let i = 0; i < shuffled.length; i++) {
+        const target = shuffled[(i + 1) % shuffled.length]
+        await DB.from('players').update({ assigning_target_id: target.id }).eq('id', shuffled[i].id)
+      }
+      await DB.from('rooms').update({ status: 'assigning' }).eq('id', roomId)
+    }
+
+    async function submitAssignment(targetId) {
+      const val = document.getElementById('person-input')?.value.trim()
+      if (!val) return
+      await DB.from('players').update({ assigned_person: val }).eq('id', targetId)
+    }
+
+    async function startGame(roomId, code) {
+      await DB.from('rooms').update({ status: 'playing' }).eq('id', roomId)
+      location.hash = `game/${code}`
+    }
+
+    // ── Game ──────────────────────────────────────────────
+    async function initGame(code) {
+      const { data: room } = await DB.from('rooms').select('*').eq('code', code).single()
+      if (!room) return renderHome('Room not found')
+
+      await refreshGame(room.id, code)
+
+      const ch = DB.channel(`game-${code}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${room.id}` }, () => refreshGame(room.id, code))
+        .subscribe()
+      setChannel(ch)
+    }
+
+    async function refreshGame(roomId, code) {
+      const { data: room } = await DB.from('rooms').select('*').eq('id', roomId).single()
+      const { data: players } = await DB.from('players').select('*').eq('room_id', roomId).order('created_at')
+      if (!room || !players) return
+
+      const me = players.find(p => p.id === myId())
+      const others = players.filter(p => p.id !== myId())
+      const allGuessed = players.every(p => p.has_guessed)
+      const isHost = room.host_id === myId()
+      const guessedCount = players.filter(p => p.has_guessed).length
+
+      if (allGuessed) {
+        // ── Results
+        const rows = players.map(p => `
+          <div class="row">
+            <span><strong>${p.name}</strong> was <strong>${p.assigned_person}</strong></span>
+          </div>`).join('')
+
+        app().innerHTML = `
+          <h1>Game Over</h1>
+          <p>Everyone figured it out.</p>
+          <hr class="divider">
+          <div>${rows}</div>
+          ${isHost ? `<hr class="divider"><button onclick="playAgain('${roomId}','${code}')">Play Again</button>` : `<p class="muted" style="margin-top:16px">Waiting for host to restart...</p>`}
+        `
+      } else {
+        // ── Main game
+        const opponentRows = others.map(p => `
+          <div class="row" style="${p.has_guessed ? 'opacity:0.45' : ''}">
+            <div style="flex:1">
+              <strong>${p.assigned_person}</strong>
+              <div class="muted">${p.name}'s person</div>
+            </div>
+            ${p.has_guessed ? '<span class="tag green">Got it</span>' : ''}
+          </div>`).join('')
+
+        app().innerHTML = `
+          <p class="muted">${code} — ${guessedCount}/${players.length} guessed</p>
+          <hr class="divider">
+          <h2>Your card</h2>
+          <div class="box">
+            ${me?.has_guessed
+              ? `<p class="success" style="margin:0">You got it — you were <strong>${me.assigned_person}</strong></p>`
+              : `<p style="margin:0">You don't know who you are yet. Ask yes/no questions!</p>`}
+          </div>
+          ${me?.has_guessed
+            ? `<p class="muted">Waiting for ${players.filter(p => !p.has_guessed).length} more to guess...</p>`
+            : `<button onclick="markGuessed()">I guessed it</button>`}
+          <hr class="divider">
+          <h2>Everyone else</h2>
+          <p class="muted">These are on their heads — give them clues</p>
+          <div>${opponentRows}</div>
+        `
+      }
+    }
+
+    async function markGuessed() {
+      await DB.from('players').update({ has_guessed: true }).eq('id', myId())
+    }
+
+    async function playAgain(roomId, code) {
+      const { data: players } = await DB.from('players').select('id').eq('room_id', roomId)
+      for (const p of players) {
+        await DB.from('players').update({ has_guessed: false, assigned_person: null, assigning_target_id: null }).eq('id', p.id)
+      }
+      await DB.from('rooms').update({ status: 'lobby' }).eq('id', roomId)
+      location.hash = `lobby/${code}`
+    }
+
+    route()
+  </script>
+</body>
+</html>
