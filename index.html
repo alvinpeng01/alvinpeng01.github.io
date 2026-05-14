@@ -126,20 +126,38 @@
         <h1>Who Am I?</h1>
         <p>Your friends put a famous person on your head. You have to figure out who you are by asking yes/no questions.</p>
         <hr class="divider">
-        <h2>Your name</h2>
-        <input id="name" placeholder="Enter your name..." autocomplete="off">
+        <h2>Start a session</h2>
+        <input id="name" placeholder="Your name..." autocomplete="off">
         ${err ? `<div class="error">${err}</div>` : ''}
         <button onclick="createRoom()">Start Session</button>
         <hr class="divider">
-        <h2>Have a code?</h2>
+        <h2>Join with a code</h2>
         <div style="display:flex;gap:8px">
           <input id="code" placeholder="ABC123" maxlength="6"
             style="letter-spacing:5px;text-transform:uppercase;flex:1;margin:0"
-            oninput="this.value=this.value.toUpperCase()">
-          <button class="ghost" onclick="joinRoom()">Join</button>
+            oninput="this.value=this.value.toUpperCase()"
+            onkeydown="if(event.key==='Enter')lookupRoom()">
+          <button class="ghost" onclick="lookupRoom()">Join</button>
         </div>
       `
       document.getElementById('name').focus()
+    }
+
+    function renderJoinName(code, err = '') {
+      app().innerHTML = `
+        <h1>Who Am I?</h1>
+        <p>Joining room <strong>${code}</strong></p>
+        <hr class="divider">
+        <h2>What's your name?</h2>
+        <input id="join-name" placeholder="Your name..." autocomplete="off">
+        ${err ? `<div class="error">${err}</div>` : ''}
+        <button onclick="joinRoom('${code}')">Join Game</button>
+        &nbsp;<button class="ghost" onclick="renderHome()">Back</button>
+      `
+      document.getElementById('join-name').focus()
+      document.getElementById('join-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') joinRoom(code)
+      })
     }
 
     async function createRoom() {
@@ -154,11 +172,18 @@
       location.hash = `lobby/${code}`
     }
 
-    async function joinRoom() {
-      const name = document.getElementById('name').value.trim()
+    async function lookupRoom() {
       const code = document.getElementById('code').value.trim().toUpperCase()
-      if (!name) return renderHome('Enter your name first')
-      if (!code) return renderHome('Enter a room code')
+      if (!code) return
+      const { data: room, error } = await DB.from('rooms').select('id,status').eq('code', code).single()
+      if (error || !room) return renderHome('Room not found')
+      if (room.status !== 'lobby') return renderHome('Game already started')
+      renderJoinName(code)
+    }
+
+    async function joinRoom(code) {
+      const name = document.getElementById('join-name').value.trim()
+      if (!name) return renderJoinName(code, 'Enter your name first')
       const { data: room, error } = await DB.from('rooms').select('id,status').eq('code', code).single()
       if (error || !room) return renderHome('Room not found')
       if (room.status !== 'lobby') return renderHome('Game already started')
