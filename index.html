@@ -377,17 +377,36 @@
           </div>
           ${me?.has_guessed
             ? `<p class="muted">Waiting for ${players.filter(p => !p.has_guessed).length} more to guess...</p>`
-            : `<button onclick="markGuessed()">I guessed it</button>`}
+            : `<div style="display:flex;gap:8px;margin-bottom:6px">
+                <input id="guess-input" placeholder="Type your guess..." autocomplete="off"
+                  style="flex:1;margin:0"
+                  onkeydown="if(event.key==='Enter')submitGuess('${me.assigned_person}')">
+                <button onclick="submitGuess('${me.assigned_person}')">Guess</button>
+               </div>
+               <div id="guess-error" class="error" style="display:none">Wrong — keep asking questions!</div>`}
           <hr class="divider">
           <h2>Everyone else</h2>
           <p class="muted">These are on their heads — give them clues</p>
           <div>${opponentRows}</div>
         `
+
+        if (!me?.has_guessed) {
+          document.getElementById('guess-input')?.focus()
+        }
       }
     }
 
-    async function markGuessed() {
-      await DB.from('players').update({ has_guessed: true }).eq('id', myId())
+    function submitGuess(answer) {
+      const val = document.getElementById('guess-input')?.value.trim()
+      if (!val) return
+      const correct = val.toLowerCase() === answer.toLowerCase()
+      if (correct) {
+        DB.from('players').update({ has_guessed: true }).eq('id', myId())
+      } else {
+        document.getElementById('guess-error').style.display = 'block'
+        document.getElementById('guess-input').value = ''
+        document.getElementById('guess-input').focus()
+      }
     }
 
     async function playAgain(roomId, code) {
