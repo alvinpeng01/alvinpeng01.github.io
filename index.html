@@ -124,7 +124,7 @@
     function renderHome(err = '') {
       app().innerHTML = `
         <h1>Who Am I?</h1>
-        <p>Your friends put a famous person on your head. You have to figure out who you are by asking yes/no questions.</p>
+        <p>Your friends put a person on your head. You have to figure out who you are by asking yes/no questions.</p>
         <hr class="divider">
         <h2>Start a session</h2>
         <input id="name" placeholder="Your name..." autocomplete="off">
@@ -268,7 +268,7 @@
             <p class="muted">Waiting for everyone else...</p>`
         } else {
           assignmentHTML = `
-            <p>Assign a famous person to <strong>${myTarget.name}</strong>:</p>
+            <p>Assign a person to <strong>${myTarget.name}</strong>:</p>
             <input id="person-input" placeholder="e.g. Taylor Swift, LeBron James..." autocomplete="off">
             <button onclick="submitAssignment('${myTarget.id}')">Submit</button>`
         }
